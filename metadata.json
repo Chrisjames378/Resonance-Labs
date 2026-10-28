@@ -1,0 +1,6 @@
+{
+  "name": "Resonance Labs",
+  "description": "Interactive AI engineering studio for low-latency neural architectures, metacognitive Actor-Critic control, and multi-model routing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
