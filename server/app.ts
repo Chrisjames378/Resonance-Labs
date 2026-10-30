@@ -69,8 +69,8 @@ app.post('/api/auth/register-interest', (req: Request, res: Response) => {
   return res.status(200).json({
     success: true,
     ledgerId,
-    message: 'Successfully written to launch ledger.',
-    totalWaitlistCount: waitlistLedger.length + 1420
+    message: 'Interest recorded temporarily in server memory (not persistent).',
+    totalWaitlistCount: waitlistLedger.length
   });
 });
 
@@ -78,33 +78,10 @@ app.post('/api/auth/register-interest', (req: Request, res: Response) => {
  * @route POST /api/v1/billing/paypal-webhook
  * @desc Statically parses and processes live structural payment loops coming directly from PayPal
  */
-app.post('/api/v1/billing/paypal-webhook', (req: Request, res: Response) => {
-  const webhookEvent = req.body || {};
-
-  switch (webhookEvent.event_type) {
-    case 'BILLING.SUBSCRIPTION.CREATED':
-    case 'BILLING.SUBSCRIPTION.ACTIVATED': {
-      const subscriptionId = webhookEvent.resource?.id || `sub_${Date.now()}`;
-      console.log(`[PayPal Webhook] Subscription confirmed active: ${subscriptionId}`);
-      break;
-    }
-
-    case 'BILLING.SUBSCRIPTION.CANCELLED':
-    case 'BILLING.SUBSCRIPTION.EXPIRED': {
-      console.log(`[PayPal Webhook] Subscription terminated: ${webhookEvent.resource?.id}`);
-      break;
-    }
-    
-    default:
-      console.log(`[PayPal Webhook] Event received: ${webhookEvent.event_type || 'TEST_SIMULATION'}`);
-      break;
-  }
-
-  return res.status(200).json({
-    received: true,
-    eventType: webhookEvent.event_type || 'SIMULATION_ACK',
-    status: 'ACTIVE_TIER_SYNCED'
-  });
+app.post('/api/v1/billing/paypal-webhook', (_req: Request, res: Response) => {
+  // Do not acknowledge or apply billing events until PayPal webhook signatures
+  // are verified server-side and subscription changes are persisted atomically.
+  return res.status(503).json({ error: 'Billing webhook verification is not configured.' });
 });
 
 /**
@@ -141,7 +118,7 @@ app.post('/api/v1/studio/commit-model', (req: Request, res: Response) => {
 
   return res.status(201).json({
     status: 'committed',
-    message: 'Model project blueprint safely written to relational data engine layer.',
+    message: 'Model blueprint stored temporarily in server memory (not persistent).',
     data: modelPayload
   });
 });
