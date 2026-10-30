@@ -1,6 +1,9 @@
 // server/app.ts
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import crypto from 'crypto';
+import { GoogleGenAI } from '@google/genai';
+import type { Interactions } from '@google/genai';
 
 const app = express();
 app.use(express.json());
@@ -183,6 +186,75 @@ app.get('/api/v1/telemetry/stream/:projectId', (req: Request, res: Response) => 
 });
 
 /**
+ * @route POST /api/v1/gemini/interact
+ * @desc Advanced Metacognitive Evaluation via Google GenAI Interactions API (gemini-3.8-flash)
+ */
+app.post('/api/v1/gemini/interact', async (req: Request, res: Response) => {
+  const { input, prompt, model } = req.body || {};
+  const query = (input || prompt || 'Evaluate metacognitive self-correction loop for neural audio synthesis').trim();
+  const selectedModel = model || 'models/gemini-3.8-flash';
+
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    // Domain-native simulation when GEMINI_API_KEY is not provisioned in local env
+    return res.status(200).json({
+      success: true,
+      mode: 'SIMULATION_FALLBACK',
+      model: selectedModel,
+      message: 'GEMINI_API_KEY not detected in runtime environment; returning synthesized metacognitive trace.',
+      step: {
+        role: 'model',
+        content: `[Resonance Engine Metacognitive Trace] Query: "${query.substring(0, 75)}...". Policy gradient checked. Value critic score: 0.948. Zero harmonic distortion detected in speech layer synthesis. Convergence reached in 2 cycles.`,
+        thinking: 'Evaluated latency profile against WebGPU ArrayBuffer budget. Verified reflection loopback invariance.'
+      }
+    });
+  }
+
+  try {
+    const ai = new GoogleGenAI({
+      apiKey,
+    });
+
+    const tools: Interactions.Tool[] = [
+      {
+        type: 'google_search',
+      },
+    ];
+
+    const generationConfig = {
+      max_output_tokens: 65536,
+      thinkingLevel: 'medium',
+    };
+
+    const interaction = await (ai as any).interactions.create({
+      model: selectedModel,
+      input: query,
+      tools: tools,
+      generation_config: generationConfig,
+    });
+
+    const lastStep = interaction.steps?.at(-1);
+
+    return res.status(200).json({
+      success: true,
+      mode: 'LIVE_GEMINI_INTERACTIONS',
+      model: selectedModel,
+      interactionId: interaction.id,
+      step: lastStep,
+      interaction
+    });
+  } catch (error: any) {
+    console.error('[Gemini Interactions Gateway Error]:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to execute Gemini interaction',
+      message: error?.message || String(error)
+    });
+  }
+});
+
+/**
  * @route GET /api/health
  */
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -196,3 +268,4 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 export default app;
+
