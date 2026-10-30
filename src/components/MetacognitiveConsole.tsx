@@ -3,6 +3,7 @@ import { Play, RotateCcw, AlertTriangle, CheckCircle2, Sliders, Activity, BrainC
 import { InnerMonologueStep, MetacognitiveTelemetry } from '../types/index.ts';
 import { runMetacognitiveLoopSim, fetchTelemetry, subscribeTelemetrySSE } from '../services/api.ts';
 import { LatencyHeatmap } from './LatencyHeatmap.tsx';
+import { MetacognitiveD3AreaChart } from './MetacognitiveD3AreaChart.tsx';
 
 export const MetacognitiveConsole: React.FC = () => {
   const [prompt, setPrompt] = useState('Synthesize low-latency speech synthesis weights while suppressing acoustic harmonic distortion.');
@@ -524,6 +525,13 @@ export const MetacognitiveConsole: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Real-Time D3.js Area Chart for Metacognitive Confidence (SSE Stream) */}
+          <MetacognitiveD3AreaChart
+            latestTelemetry={telemetry}
+            confidenceFloor={confidenceFloor}
+            sseActive={useSSE && sseActive}
+          />
 
           {/* Time-Series Latency Heatmap & Spike Monitor (Recharts) */}
           <LatencyHeatmap />
