@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import { MetacognitiveTelemetry } from '../types/index.ts';
-import { Activity, ShieldCheck, AlertTriangle, TrendingUp, Radio, RefreshCw, BarChart2 } from 'lucide-react';
+import { Activity, ShieldCheck, AlertTriangle, TrendingUp, Radio, RefreshCw, Sparkles, CheckCircle2 } from 'lucide-react';
 
 interface MetacognitiveD3AreaChartProps {
   latestTelemetry: MetacognitiveTelemetry | null;
@@ -29,20 +29,65 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
+  // References to keep persistent D3 selections across stream ticks
+  const chartInitializedRef = useRef(false);
+  const elementsRef = useRef<{
+    svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null;
+    g: d3.Selection<SVGGElement, unknown, null, undefined> | null;
+    gridYGroup: d3.Selection<SVGGElement, unknown, null, undefined> | null;
+    areaPath: d3.Selection<SVGPathElement, any, null, undefined> | null;
+    linePath: d3.Selection<SVGPathElement, any, null, undefined> | null;
+    floorLine: d3.Selection<SVGLineElement, unknown, null, undefined> | null;
+    floorText: d3.Selection<SVGTextElement, unknown, null, undefined> | null;
+    xAxisGroup: d3.Selection<SVGGElement, unknown, null, undefined> | null;
+    yAxisGroup: d3.Selection<SVGGElement, unknown, null, undefined> | null;
+    beaconGroup: d3.Selection<SVGGElement, unknown, null, undefined> | null;
+    beaconRing: d3.Selection<SVGCircleElement, unknown, null, undefined> | null;
+    beaconCore: d3.Selection<SVGCircleElement, unknown, null, undefined> | null;
+    focusOverlay: d3.Selection<SVGGElement, unknown, null, undefined> | null;
+    focusLine: d3.Selection<SVGLineElement, unknown, null, undefined> | null;
+    focusCircle: d3.Selection<SVGCircleElement, unknown, null, undefined> | null;
+    overlayRect: d3.Selection<SVGRectElement, unknown, null, undefined> | null;
+    currentXScale: d3.ScaleTime<number, number> | null;
+    currentYScale: d3.ScaleLinear<number, number> | null;
+    innerWidth: number;
+    innerHeight: number;
+  }>({
+    svg: null,
+    g: null,
+    gridYGroup: null,
+    areaPath: null,
+    linePath: null,
+    floorLine: null,
+    floorText: null,
+    xAxisGroup: null,
+    yAxisGroup: null,
+    beaconGroup: null,
+    beaconRing: null,
+    beaconCore: null,
+    focusOverlay: null,
+    focusLine: null,
+    focusCircle: null,
+    overlayRect: null,
+    currentXScale: null,
+    currentYScale: null,
+    innerWidth: 0,
+    innerHeight: 0,
+  });
+
   // Maintain rolling history of confidence telemetry
   const [history, setHistory] = useState<ConfidenceDataPoint[]>(() => {
-    // Pre-seed with initial baseline points so the chart is immediately interactive
     const now = Date.now();
     const initialPoints: ConfidenceDataPoint[] = [];
     for (let i = 18; i >= 0; i--) {
       const time = new Date(now - i * 1500);
-      const conf = +(0.88 + Math.random() * 0.09).toFixed(4);
+      const conf = +(0.88 + Math.random() * 0.08).toFixed(4);
       initialPoints.push({
         id: `init_${i}`,
         timestamp: time,
         timeLabel: d3.timeFormat('%H:%M:%S')(time),
         confidence: conf,
-        loss: +(0.03 + Math.random() * 0.05).toFixed(4),
+        loss: +(0.03 + Math.random() * 0.04).toFixed(4),
         floor: confidenceFloor,
         isBreach: conf < confidenceFloor
       });
@@ -50,9 +95,14 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
     return initialPoints;
   });
 
+  // Keep a reference to history for event listeners without causing re-binds
+  const historyRef = useRef<ConfidenceDataPoint[]>(history);
+  historyRef.current = history;
+
   const [hoveredPoint, setHoveredPoint] = useState<ConfidenceDataPoint | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   // Last telemetry timestamp tracked to avoid duplicate point appends
   const lastProcessedTimestamp = useRef<string | null>(null);
@@ -87,6 +137,10 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
       }
       return next;
     });
+
+    setIsTransitioning(true);
+    const timer = setTimeout(() => setIsTransitioning(false), 700);
+    return () => clearTimeout(timer);
   }, [latestTelemetry, confidenceFloor, isPaused, maxHistoryPoints]);
 
   // Compute summary metrics
@@ -104,18 +158,18 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
     return { current, avg, min, max, breaches };
   }, [history]);
 
-  // D3 Area Chart Render Loop
-  useEffect(() => {
-    if (!svgRef.current || !containerRef.current || history.length < 2) return;
+  // Setup / Initialize D3 Structure (runs once on mount or resize)
+  const initChart = useCallback(() => {
+    if (!svgRef.current || !containerRef.current) return;
 
     const containerWidth = containerRef.current.clientWidth || 600;
     const height = 240;
     const margin = { top: 20, right: 30, bottom: 35, left: 50 };
-    const innerWidth = containerWidth - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
+    const innerWidth = Math.max(100, containerWidth - margin.left - margin.right);
+    const innerHeight = Math.max(100, height - margin.top - margin.bottom);
 
     const svg = d3.select(svgRef.current);
-    svg.selectAll('*').remove();
+    svg.selectAll('*').remove(); // clear for clean initialization
 
     svg
       .attr('viewBox', `0 0 ${containerWidth} ${height}`)
@@ -134,38 +188,18 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
       .attr('x2', '0%')
       .attr('y2', '100%');
 
-    areaGradient
-      .append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', '#06b6d4')
-      .attr('stop-opacity', 0.5);
-
-    areaGradient
-      .append('stop')
-      .attr('offset', '65%')
-      .attr('stop-color', '#0ea5e9')
-      .attr('stop-opacity', 0.15);
-
-    areaGradient
-      .append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', '#0284c7')
-      .attr('stop-opacity', 0.0);
-
-    // Floor Alert Gradient for Area under Floor
-    const breachGradient = defs
-      .append('linearGradient')
-      .attr('id', 'breach-line-gradient')
-      .attr('x1', '0%')
-      .attr('y1', '0%')
-      .attr('x2', '100%')
-      .attr('y2', '0%');
-
-    breachGradient.append('stop').attr('offset', '0%').attr('stop-color', '#f43f5e').attr('stop-opacity', 0.8);
-    breachGradient.append('stop').attr('offset', '100%').attr('stop-color', '#e11d48').attr('stop-opacity', 0.3);
+    areaGradient.append('stop').attr('offset', '0%').attr('stop-color', '#06b6d4').attr('stop-opacity', 0.55);
+    areaGradient.append('stop').attr('offset', '65%').attr('stop-color', '#0ea5e9').attr('stop-opacity', 0.18);
+    areaGradient.append('stop').attr('offset', '100%').attr('stop-color', '#0284c7').attr('stop-opacity', 0.0);
 
     // Glow filter
-    const filter = defs.append('filter').attr('id', 'glow').attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
+    const filter = defs
+      .append('filter')
+      .attr('id', 'glow')
+      .attr('x', '-20%')
+      .attr('y', '-20%')
+      .attr('width', '140%')
+      .attr('height', '140%');
     filter.append('feGaussianBlur').attr('stdDeviation', '2.5').attr('result', 'blur');
     const feMerge = filter.append('feMerge');
     feMerge.append('feMergeNode').attr('in', 'blur');
@@ -173,148 +207,78 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
 
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // Scales
-    const timeExtent = d3.extent(history, (d) => d.timestamp) as [Date, Date];
-    const xScale = d3.scaleTime().domain(timeExtent).range([0, innerWidth]);
+    // Grid group
+    const gridYGroup = g.append('g').attr('class', 'grid grid-y');
 
-    const minConfidence = d3.min(history, (d) => d.confidence) ?? 0.80;
-    const maxConfidence = d3.max(history, (d) => d.confidence) ?? 1.0;
-
-    // Y domain: Ensure confidenceFloor is always visible, with safe padding
-    const yDomainMin = Math.max(0.60, Math.min(minConfidence - 0.05, confidenceFloor - 0.06));
-    const yDomainMax = Math.min(1.05, Math.max(maxConfidence + 0.03, 1.0));
-    const yScale = d3.scaleLinear().domain([yDomainMin, yDomainMax]).range([innerHeight, 0]);
-
-    // Horizontal Grid Lines
-    const yAxisGrid = d3
-      .axisLeft(yScale)
-      .tickSize(-innerWidth)
-      .tickFormat(() => '')
-      .ticks(5);
-
-    g.append('g')
-      .attr('class', 'grid grid-y')
-      .call(yAxisGrid)
-      .selectAll('line')
-      .attr('stroke', '#1e293b')
-      .attr('stroke-dasharray', '3,3');
-
-    g.select('.grid-y .domain').remove();
-
-    // Area Generator
-    const areaGenerator = d3
-      .area<ConfidenceDataPoint>()
-      .x((d) => xScale(d.timestamp))
-      .y0(innerHeight)
-      .y1((d) => yScale(d.confidence))
-      .curve(d3.curveMonotoneX);
-
-    // Render Area Path
-    g.append('path')
-      .datum(history)
+    // Area Path
+    const areaPath = g
+      .append('path')
       .attr('class', 'confidence-area')
-      .attr('d', areaGenerator)
       .attr('fill', 'url(#confidence-area-gradient)');
 
-    // Line Generator (Upper contour)
-    const lineGenerator = d3
-      .line<ConfidenceDataPoint>()
-      .x((d) => xScale(d.timestamp))
-      .y((d) => yScale(d.confidence))
-      .curve(d3.curveMonotoneX);
-
-    // Render Line Path
-    g.append('path')
-      .datum(history)
+    // Line Path (Upper contour)
+    const linePath = g
+      .append('path')
       .attr('class', 'confidence-line')
-      .attr('d', lineGenerator)
       .attr('fill', 'none')
       .attr('stroke', '#06b6d4')
-      .attr('stroke-width', 2)
+      .attr('stroke-width', 2.2)
       .attr('filter', 'url(#glow)');
 
-    // Render Confidence Floor Threshold Line
-    const floorY = yScale(confidenceFloor);
-    if (floorY >= 0 && floorY <= innerHeight) {
-      g.append('line')
-        .attr('x1', 0)
-        .attr('x2', innerWidth)
-        .attr('y1', floorY)
-        .attr('y2', floorY)
-        .attr('stroke', '#f59e0b')
-        .attr('stroke-width', 1.5)
-        .attr('stroke-dasharray', '5,4')
-        .attr('opacity', 0.85);
+    // Confidence Floor Threshold Line & Text
+    const floorLine = g
+      .append('line')
+      .attr('class', 'floor-line')
+      .attr('x1', 0)
+      .attr('x2', innerWidth)
+      .attr('stroke', '#f59e0b')
+      .attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', '5,4')
+      .attr('opacity', 0.9);
 
-      g.append('text')
-        .attr('x', innerWidth - 6)
-        .attr('y', floorY - 5)
-        .attr('text-anchor', 'end')
-        .attr('fill', '#f59e0b')
-        .attr('font-size', '10px')
-        .attr('font-family', 'ui-monospace, monospace')
-        .attr('font-weight', '600')
-        .text(`Floor: ${(confidenceFloor * 100).toFixed(1)}%`);
-    }
+    const floorText = g
+      .append('text')
+      .attr('class', 'floor-label')
+      .attr('x', innerWidth - 6)
+      .attr('text-anchor', 'end')
+      .attr('fill', '#f59e0b')
+      .attr('font-size', '10px')
+      .attr('font-family', 'ui-monospace, monospace')
+      .attr('font-weight', '600');
 
-    // X Axis
-    const xAxis = d3
-      .axisBottom(xScale)
-      .ticks(Math.max(3, Math.floor(innerWidth / 90)))
-      .tickFormat((d) => d3.timeFormat('%H:%M:%S')(d as Date));
-
+    // X Axis Group
     const xAxisGroup = g
       .append('g')
       .attr('class', 'axis axis-x')
-      .attr('transform', `translate(0,${innerHeight})`)
-      .call(xAxis);
+      .attr('transform', `translate(0,${innerHeight})`);
 
-    xAxisGroup.selectAll('text').attr('fill', '#94a3b8').attr('font-size', '10px').attr('font-family', 'ui-monospace, monospace');
-    xAxisGroup.selectAll('line').attr('stroke', '#334155');
-    xAxisGroup.select('.domain').attr('stroke', '#334155');
+    // Y Axis Group
+    const yAxisGroup = g.append('g').attr('class', 'axis axis-y');
 
-    // Y Axis
-    const yAxis = d3
-      .axisLeft(yScale)
-      .ticks(5)
-      .tickFormat((d) => `${((d as number) * 100).toFixed(0)}%`);
+    // Active Beacon Group
+    const beaconGroup = g.append('g').attr('class', 'beacon-group');
 
-    const yAxisGroup = g.append('g').attr('class', 'axis axis-y').call(yAxis);
+    const beaconRing = beaconGroup
+      .append('circle')
+      .attr('class', 'beacon-ring')
+      .attr('r', 7)
+      .attr('fill', 'none')
+      .attr('stroke', '#06b6d4')
+      .attr('stroke-width', 1.5)
+      .attr('opacity', 0.85);
 
-    yAxisGroup.selectAll('text').attr('fill', '#94a3b8').attr('font-size', '10px').attr('font-family', 'ui-monospace, monospace');
-    yAxisGroup.selectAll('line').attr('stroke', '#334155');
-    yAxisGroup.select('.domain').attr('stroke', '#334155');
-
-    // Active Latest Point Beacon
-    const latestPoint = history[history.length - 1];
-    if (latestPoint) {
-      const latestX = xScale(latestPoint.timestamp);
-      const latestY = yScale(latestPoint.confidence);
-
-      // Outer pulse ring
-      g.append('circle')
-        .attr('cx', latestX)
-        .attr('cy', latestY)
-        .attr('r', 7)
-        .attr('fill', 'none')
-        .attr('stroke', latestPoint.isBreach ? '#f43f5e' : '#06b6d4')
-        .attr('stroke-width', 1.5)
-        .attr('opacity', 0.7);
-
-      // Solid inner core
-      g.append('circle')
-        .attr('cx', latestX)
-        .attr('cy', latestY)
-        .attr('r', 3.5)
-        .attr('fill', latestPoint.isBreach ? '#f43f5e' : '#22d3ee')
-        .attr('stroke', '#0f172a')
-        .attr('stroke-width', 1.5);
-    }
+    const beaconCore = beaconGroup
+      .append('circle')
+      .attr('class', 'beacon-core')
+      .attr('r', 3.5)
+      .attr('fill', '#22d3ee')
+      .attr('stroke', '#0f172a')
+      .attr('stroke-width', 1.5);
 
     // Crosshair and Hover Interaction Overlay
-    const focusG = g.append('g').attr('class', 'focus-overlay').style('display', 'none');
+    const focusOverlay = g.append('g').attr('class', 'focus-overlay').style('display', 'none');
 
-    const focusLine = focusG
+    const focusLine = focusOverlay
       .append('line')
       .attr('y1', 0)
       .attr('y2', innerHeight)
@@ -322,42 +286,50 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
       .attr('stroke-width', 1)
       .attr('stroke-dasharray', '2,2');
 
-    const focusCircle = focusG
+    const focusCircle = focusOverlay
       .append('circle')
       .attr('r', 4.5)
       .attr('fill', '#38bdf8')
       .attr('stroke', '#0284c7')
       .attr('stroke-width', 2);
 
-    // Transparent mouse-capturing overlay
-    const bisectDate = d3.bisector<ConfidenceDataPoint, Date>((d) => d.timestamp).left;
-
-    g.append('rect')
+    const overlayRect = g
+      .append('rect')
       .attr('class', 'overlay')
       .attr('width', innerWidth)
       .attr('height', innerHeight)
       .attr('fill', 'transparent')
-      .style('cursor', 'crosshair')
-      .on('mouseenter', () => focusG.style('display', null))
+      .style('cursor', 'crosshair');
+
+    // Attach hover listeners using the live ref to avoid unbinding
+    const bisectDate = d3.bisector<ConfidenceDataPoint, Date>((d) => d.timestamp).left;
+
+    overlayRect
+      .on('mouseenter', () => focusOverlay.style('display', null))
       .on('mouseleave', () => {
-        focusG.style('display', 'none');
+        focusOverlay.style('display', 'none');
         setHoveredPoint(null);
         setTooltipPos(null);
       })
       .on('mousemove', (event) => {
+        const curX = elementsRef.current.currentXScale;
+        const curY = elementsRef.current.currentYScale;
+        const curHist = historyRef.current;
+        if (!curX || !curY || curHist.length === 0) return;
+
         const [mouseX] = d3.pointer(event);
-        const x0 = xScale.invert(mouseX);
-        const i = bisectDate(history, x0, 1);
-        const d0 = history[i - 1];
-        const d1 = history[i];
+        const x0 = curX.invert(mouseX);
+        const i = bisectDate(curHist, x0, 1);
+        const d0 = curHist[i - 1];
+        const d1 = curHist[i];
         let d = d0;
         if (d1 && x0) {
           d = x0.getTime() - d0.timestamp.getTime() > d1.timestamp.getTime() - x0.getTime() ? d1 : d0;
         }
         if (!d) return;
 
-        const posX = xScale(d.timestamp);
-        const posY = yScale(d.confidence);
+        const posX = curX(d.timestamp);
+        const posY = curY(d.confidence);
 
         focusLine.attr('x1', posX).attr('x2', posX);
         focusCircle.attr('cx', posX).attr('cy', posY);
@@ -368,6 +340,188 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
           y: posY + margin.top
         });
       });
+
+    elementsRef.current = {
+      svg,
+      g,
+      gridYGroup,
+      areaPath,
+      linePath,
+      floorLine,
+      floorText,
+      xAxisGroup,
+      yAxisGroup,
+      beaconGroup,
+      beaconRing,
+      beaconCore,
+      focusOverlay,
+      focusLine,
+      focusCircle,
+      overlayRect,
+      currentXScale: null,
+      currentYScale: null,
+      innerWidth,
+      innerHeight,
+    };
+
+    chartInitializedRef.current = true;
+  }, []);
+
+  // Initialize once and handle window resize
+  useEffect(() => {
+    initChart();
+
+    const handleResize = () => {
+      initChart();
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [initChart]);
+
+  // Update chart with smooth D3 transitions whenever history or confidenceFloor updates
+  useEffect(() => {
+    if (!chartInitializedRef.current || history.length < 2) return;
+    const els = elementsRef.current;
+    if (!els.svg || !els.g || !els.areaPath || !els.linePath) return;
+
+    const { innerWidth, innerHeight } = els;
+
+    // Scales
+    const timeExtent = d3.extent(history, (d) => d.timestamp) as [Date, Date];
+    const xScale = d3.scaleTime().domain(timeExtent).range([0, innerWidth]);
+
+    const minConfidence = d3.min(history, (d) => d.confidence) ?? 0.80;
+    const maxConfidence = d3.max(history, (d) => d.confidence) ?? 1.0;
+
+    const yDomainMin = Math.max(0.60, Math.min(minConfidence - 0.05, confidenceFloor - 0.06));
+    const yDomainMax = Math.min(1.05, Math.max(maxConfidence + 0.03, 1.0));
+    const yScale = d3.scaleLinear().domain([yDomainMin, yDomainMax]).range([innerHeight, 0]);
+
+    els.currentXScale = xScale;
+    els.currentYScale = yScale;
+
+    // Transition Configuration: Fluid 650ms CubicOut Animation
+    const t = d3.transition().duration(650).ease(d3.easeCubicOut) as any;
+
+    // Update Grid
+    const yAxisGrid = d3
+      .axisLeft(yScale)
+      .tickSize(-innerWidth)
+      .tickFormat(() => '')
+      .ticks(5);
+
+    if (els.gridYGroup) {
+      els.gridYGroup
+        .transition(t)
+        .call(yAxisGrid as any)
+        .selectAll('line')
+        .attr('stroke', '#1e293b')
+        .attr('stroke-dasharray', '3,3');
+      els.gridYGroup.select('.domain').remove();
+    }
+
+    // Area Generator
+    const areaGenerator = d3
+      .area<ConfidenceDataPoint>()
+      .x((d) => xScale(d.timestamp))
+      .y0(innerHeight)
+      .y1((d) => yScale(d.confidence))
+      .curve(d3.curveMonotoneX);
+
+    // Line Generator (Upper contour)
+    const lineGenerator = d3
+      .line<ConfidenceDataPoint>()
+      .x((d) => xScale(d.timestamp))
+      .y((d) => yScale(d.confidence))
+      .curve(d3.curveMonotoneX);
+
+    // Smoothly animate the Area path
+    els.areaPath
+      .datum(history)
+      .transition(t)
+      .attr('d', areaGenerator as any);
+
+    // Smoothly animate the Line contour
+    els.linePath
+      .datum(history)
+      .transition(t)
+      .attr('d', lineGenerator as any);
+
+    // Smoothly animate the Confidence Floor Threshold Line & Text
+    const floorY = yScale(confidenceFloor);
+    if (els.floorLine && els.floorText) {
+      if (floorY >= 0 && floorY <= innerHeight) {
+        els.floorLine
+          .style('display', null)
+          .transition(t)
+          .attr('y1', floorY)
+          .attr('y2', floorY);
+
+        els.floorText
+          .style('display', null)
+          .transition(t)
+          .attr('y', Math.max(12, floorY - 5))
+          .text(`Floor: ${(confidenceFloor * 100).toFixed(1)}%`);
+      } else {
+        els.floorLine.style('display', 'none');
+        els.floorText.style('display', 'none');
+      }
+    }
+
+    // Smoothly animate Axes
+    const xAxis = d3
+      .axisBottom(xScale)
+      .ticks(Math.max(3, Math.floor(innerWidth / 90)))
+      .tickFormat((d) => d3.timeFormat('%H:%M:%S')(d as Date));
+
+    if (els.xAxisGroup) {
+      els.xAxisGroup
+        .transition(t)
+        .call(xAxis as any)
+        .selectAll('text')
+        .attr('fill', '#94a3b8')
+        .attr('font-size', '10px')
+        .attr('font-family', 'ui-monospace, monospace');
+      els.xAxisGroup.selectAll('line').attr('stroke', '#334155');
+      els.xAxisGroup.select('.domain').attr('stroke', '#334155');
+    }
+
+    const yAxis = d3
+      .axisLeft(yScale)
+      .ticks(5)
+      .tickFormat((d) => `${((d as number) * 100).toFixed(0)}%`);
+
+    if (els.yAxisGroup) {
+      els.yAxisGroup
+        .transition(t)
+        .call(yAxis as any)
+        .selectAll('text')
+        .attr('fill', '#94a3b8')
+        .attr('font-size', '10px')
+        .attr('font-family', 'ui-monospace, monospace');
+      els.yAxisGroup.selectAll('line').attr('stroke', '#334155');
+      els.yAxisGroup.select('.domain').attr('stroke', '#334155');
+    }
+
+    // Smoothly animate Active Latest Point Beacon
+    const latestPoint = history[history.length - 1];
+    if (latestPoint && els.beaconGroup && els.beaconRing && els.beaconCore) {
+      const latestX = xScale(latestPoint.timestamp);
+      const latestY = yScale(latestPoint.confidence);
+
+      els.beaconGroup
+        .transition(t)
+        .attr('transform', `translate(${latestX},${latestY})`);
+
+      els.beaconRing
+        .transition(t)
+        .attr('stroke', latestPoint.isBreach ? '#f43f5e' : '#06b6d4');
+
+      els.beaconCore
+        .transition(t)
+        .attr('fill', latestPoint.isBreach ? '#f43f5e' : '#22d3ee');
+    }
   }, [history, confidenceFloor]);
 
   return (
@@ -382,12 +536,13 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
           <div>
             <h3 className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
               D3.js Real-Time Metacognitive Confidence Area Chart
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-300">
-                Live SSE Stream
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-300 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                Fluid 60fps SSE Transition
               </span>
             </h3>
             <p className="text-[11px] text-slate-400">
-              Direct SVG render with continuous monotonic interpolation and dynamic confidence floor tracking.
+              Live continuous spline with D3 cubic-out interpolation on stream packet push and dynamic floor tracking.
             </p>
           </div>
         </div>
@@ -456,15 +611,18 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
         </div>
 
         <div className="p-2.5 bg-slate-950 border border-slate-800/90 rounded col-span-2 sm:col-span-1">
-          <span className="text-slate-500 block text-[10px] uppercase">HEALTH STATUS</span>
+          <span className="text-slate-500 block text-[10px] uppercase">ANIMATION STATE</span>
           <span
-            className={`font-bold tabular-nums text-sm block mt-0.5 ${
-              stats.breaches === 0 ? 'text-emerald-400' : 'text-rose-400'
+            className={`font-bold tabular-nums text-sm block mt-0.5 flex items-center gap-1.5 ${
+              isTransitioning ? 'text-cyan-400' : 'text-emerald-400'
             }`}
           >
-            {stats.breaches === 0 ? 'NOMINAL' : `${stats.breaches} RECOVERY LOOPS`}
+            <span className={`w-2 h-2 rounded-full ${isTransitioning ? 'bg-cyan-400 animate-ping' : 'bg-emerald-400'}`} />
+            {isTransitioning ? 'INTERPOLATING' : 'SETTLED'}
           </span>
-          <span className="text-[10px] text-slate-500 block mt-0.5">Reflection Convergence</span>
+          <span className="text-[10px] text-slate-500 block mt-0.5">
+            {stats.breaches === 0 ? 'Nominal Convergence' : `${stats.breaches} Breaches Detected`}
+          </span>
         </div>
       </div>
 
@@ -518,7 +676,7 @@ export const MetacognitiveD3AreaChart: React.FC<MetacognitiveD3AreaChartProps> =
         </div>
 
         <div className="text-slate-500">
-          Showing rolling window of {history.length} samples · Hover over chart for inspect trace
+          Rolling window of {history.length} cycles · Smooth D3 cubic-out interpolation on packet ingress
         </div>
       </div>
 
