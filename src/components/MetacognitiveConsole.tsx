@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Play, RotateCcw, AlertTriangle, CheckCircle2, Sliders, Activity, BrainCircuit } from 'lucide-react';
+import { Play, RotateCcw, AlertTriangle, CheckCircle2, Sliders, Activity, BrainCircuit, BookOpen, X } from 'lucide-react';
 import { InnerMonologueStep, MetacognitiveTelemetry } from '../types/index.ts';
 import { runMetacognitiveLoopSim, fetchTelemetry, subscribeTelemetrySSE } from '../services/api.ts';
 import { LatencyHeatmap } from './LatencyHeatmap.tsx';
 import { MetacognitiveD3AreaChart } from './MetacognitiveD3AreaChart.tsx';
+import { EducationalTooltip, EDUCATIONAL_GLOSSARY } from './EducationalTooltip.tsx';
 
 export const MetacognitiveConsole: React.FC = () => {
   const [prompt, setPrompt] = useState('Synthesize low-latency speech synthesis weights while suppressing acoustic harmonic distortion.');
   const [confidenceFloor, setConfidenceFloor] = useState(0.85);
   const [empathyFactor, setEmpathyFactor] = useState(0.85);
   const [metacognitionFactor, setMetacognitionFactor] = useState(0.90);
+  const [showGlossaryModal, setShowGlossaryModal] = useState(false);
   
   const [isRunning, setIsRunning] = useState(false);
   const [simulationResult, setSimulationResult] = useState<{
@@ -125,14 +127,30 @@ export const MetacognitiveConsole: React.FC = () => {
             Metacognitive Control Console
           </h2>
           <p className="text-sm text-slate-400 mt-1">
-            Observe the Actor-Critic reflection loop in real time. Watch candidate tokens undergo inner monologue evaluation and autonomous self-correction.
+            Observe the Actor-Critic{' '}
+            <EducationalTooltip term="Reflection Loopback" position="bottom">
+              reflection loop
+            </EducationalTooltip>{' '}
+            in real time. Watch candidate tokens undergo{' '}
+            <EducationalTooltip term="Inner Monologue" position="bottom">
+              inner monologue
+            </EducationalTooltip>{' '}
+            evaluation and autonomous self-correction.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowGlossaryModal(true)}
+            className="px-3 py-2 text-xs font-mono text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 border border-cyan-800/80 rounded transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Browse full educational glossary of Actor-Critic metacognitive terms"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            Glossary & Rules
+          </button>
+          <button
             onClick={handleReset}
-            className="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800 rounded transition-colors flex items-center gap-1.5"
+            className="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800 rounded transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Reset State
@@ -140,7 +158,7 @@ export const MetacognitiveConsole: React.FC = () => {
           <button
             onClick={handleExecuteLoop}
             disabled={isRunning}
-            className="px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded transition-colors flex items-center gap-2 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            className="px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded transition-colors flex items-center gap-2 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 cursor-pointer"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
             {isRunning ? 'Evaluating Reflection...' : 'Execute Metacognitive Loop'}
@@ -157,7 +175,9 @@ export const MetacognitiveConsole: React.FC = () => {
           {/* Actor Prompt Card */}
           <div className="p-5 bg-slate-900/80 border border-slate-800 rounded space-y-4">
             <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider">
-              Actor Model Prompt & Objective
+              <EducationalTooltip term="Actor Model">
+                Actor Model Prompt & Objective
+              </EducationalTooltip>
             </label>
             <textarea
               rows={3}
@@ -179,7 +199,7 @@ export const MetacognitiveConsole: React.FC = () => {
                   <button
                     key={preset}
                     onClick={() => setPrompt(preset)}
-                    className="text-[11px] font-mono px-2 py-1 bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 rounded transition-colors text-left"
+                    className="text-[11px] font-mono px-2 py-1 bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 rounded transition-colors text-left cursor-pointer"
                   >
                     {preset.substring(0, 32)}...
                   </button>
@@ -193,7 +213,9 @@ export const MetacognitiveConsole: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <span className="text-xs font-mono text-slate-300 font-semibold flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-emerald-400" />
-                Critic Threshold Controls
+                <EducationalTooltip term="Critic Model">
+                  Critic Threshold Controls
+                </EducationalTooltip>
               </span>
               <span className="text-[11px] font-mono text-emerald-400">Lesson 01 Alignment</span>
             </div>
@@ -201,7 +223,9 @@ export const MetacognitiveConsole: React.FC = () => {
             {/* Target Confidence Floor */}
             <div>
               <div className="flex items-center justify-between text-xs font-mono mb-1.5">
-                <span className="text-slate-300">Confidence Floor Threshold</span>
+                <EducationalTooltip term="Confidence Floor" position="top">
+                  <span className="text-slate-300 font-medium">Confidence Floor Threshold</span>
+                </EducationalTooltip>
                 <span className="text-emerald-400 font-bold tabular-nums font-mono">
                   {confidenceFloor.toFixed(2)}
                 </span>
@@ -216,14 +240,19 @@ export const MetacognitiveConsole: React.FC = () => {
                 className="w-full accent-emerald-400 cursor-pointer"
               />
               <p className="text-[11px] text-slate-500 mt-1">
-                Any candidate variant scoring below {confidenceFloor.toFixed(2)} triggers automatic self-correction loopback.
+                Any candidate variant scoring below {confidenceFloor.toFixed(2)} triggers automatic{' '}
+                <EducationalTooltip term="Reflection Loopback" showIcon={false}>
+                  self-correction loopback
+                </EducationalTooltip>.
               </p>
             </div>
 
             {/* Metacognition Factor */}
             <div>
               <div className="flex items-center justify-between text-xs font-mono mb-1.5">
-                <span className="text-slate-300">Metacognition Factor</span>
+                <EducationalTooltip term="Metacognition Factor" position="top">
+                  <span className="text-slate-300 font-medium">Metacognition Factor</span>
+                </EducationalTooltip>
                 <span className="text-cyan-400 font-bold tabular-nums font-mono">
                   {metacognitionFactor.toFixed(2)}
                 </span>
@@ -242,7 +271,9 @@ export const MetacognitiveConsole: React.FC = () => {
             {/* Empathy Factor */}
             <div>
               <div className="flex items-center justify-between text-xs font-mono mb-1.5">
-                <span className="text-slate-300">Empathy Factor</span>
+                <EducationalTooltip term="Empathy Factor" position="top">
+                  <span className="text-slate-300 font-medium">Empathy Factor</span>
+                </EducationalTooltip>
                 <span className="text-slate-200 font-bold tabular-nums font-mono">
                   {empathyFactor.toFixed(2)}
                 </span>
@@ -276,8 +307,8 @@ export const MetacognitiveConsole: React.FC = () => {
               </div>
             )}
             <div className="p-3 bg-slate-950 text-xs font-mono text-slate-400 border-t border-slate-800 flex justify-between">
-              <span>Policy Network (Actor)</span>
-              <span className="text-emerald-400">Value Network (Critic)</span>
+              <EducationalTooltip term="Actor Model">Policy Network (Actor)</EducationalTooltip>
+              <EducationalTooltip term="Critic Model">Value Network (Critic)</EducationalTooltip>
             </div>
           </div>
 
@@ -291,7 +322,9 @@ export const MetacognitiveConsole: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <span className="text-xs font-mono text-slate-300 font-semibold flex items-center gap-2">
                 <BrainCircuit className="w-4 h-4 text-cyan-400" />
-                Inner Monologue Scratchpad & Reflection Trace
+                <EducationalTooltip term="Inner Monologue">
+                  Inner Monologue Scratchpad & Reflection Trace
+                </EducationalTooltip>
               </span>
               <span className="text-xs font-mono text-slate-500">
                 {simulationResult ? `${simulationResult.totalAttempts} Iteration(s)` : 'Awaiting Run'}
@@ -342,12 +375,17 @@ export const MetacognitiveConsole: React.FC = () => {
 
                       {/* Actor Output */}
                       <div className="text-xs font-mono text-slate-300 mb-2">
-                        <span className="text-slate-500">Actor Output:</span> {step.actorCandidate}
+                        <EducationalTooltip term="Actor Model" showIcon={false}>
+                          <span className="text-slate-500">Actor Output:</span>
+                        </EducationalTooltip>{' '}
+                        {step.actorCandidate}
                       </div>
 
                       {/* Inner Monologue */}
                       <div className="p-2.5 bg-slate-950/90 rounded border border-slate-800 text-xs font-mono text-slate-400 mb-2">
-                        <span className="text-emerald-400 font-bold block mb-1">Inner Monologue Reflection:</span>
+                        <EducationalTooltip term="Inner Monologue">
+                          <span className="text-emerald-400 font-bold block mb-1">Inner Monologue Reflection:</span>
+                        </EducationalTooltip>
                         {step.monologueSummary}
                       </div>
 
@@ -380,7 +418,12 @@ export const MetacognitiveConsole: React.FC = () => {
                   </div>
                   <div className="mt-2 pt-2 border-t border-slate-900 flex justify-between text-[11px] font-mono text-slate-500">
                     <span>Total Latency: {simulationResult.totalTimeMs} ms</span>
-                    <span>Self-Correction Converged: {simulationResult.converged ? 'YES' : 'MAX ATTEMPTS'}</span>
+                    <span>
+                      <EducationalTooltip term="Reflection Loopback" showIcon={false}>
+                        Self-Correction Converged:
+                      </EducationalTooltip>{' '}
+                      {simulationResult.converged ? 'YES' : 'MAX ATTEMPTS'}
+                    </span>
                   </div>
                 </div>
 
@@ -416,7 +459,9 @@ export const MetacognitiveConsole: React.FC = () => {
               
               {/* Loss Threshold Tuning & Spike Test */}
               <div className="flex items-center gap-2 text-xs font-mono">
-                <span className="text-slate-400 text-[11px]">Loss Alert Ceiling:</span>
+                <EducationalTooltip term="Loss Alert Ceiling" position="bottom">
+                  <span className="text-slate-400 text-[11px]">Loss Alert Ceiling:</span>
+                </EducationalTooltip>
                 <input
                   type="number"
                   step="0.01"
@@ -429,7 +474,7 @@ export const MetacognitiveConsole: React.FC = () => {
                 />
                 <button
                   onClick={handleSimulateLossSpike}
-                  className="px-2 py-0.5 bg-slate-950 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-500 text-slate-300 hover:text-rose-300 rounded text-[11px] transition-colors"
+                  className="px-2 py-0.5 bg-slate-950 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-500 text-slate-300 hover:text-rose-300 rounded text-[11px] transition-colors cursor-pointer"
                   title="Force a loss spike above threshold to test red visual warning"
                 >
                   Test Spike
@@ -493,11 +538,13 @@ export const MetacognitiveConsole: React.FC = () => {
                   </div>
 
                   <div className="p-2.5 bg-slate-950 border border-slate-800 rounded">
-                    <span className="text-slate-500 block text-[10px]">CRITIC CONFIDENCE</span>
+                    <EducationalTooltip term="Critic Confidence" position="top">
+                      <span className="text-slate-500 block text-[10px]">CRITIC CONFIDENCE</span>
+                    </EducationalTooltip>
                     <span className="text-cyan-400 font-bold tabular-nums text-sm block mt-0.5">
                       {(telemetry.metrics.metacognitiveConfidence * 100).toFixed(1)}%
                     </span>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">Floor: 85.0%</span>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">Floor: {(confidenceFloor * 100).toFixed(0)}%</span>
                   </div>
 
                   <div className="p-2.5 bg-slate-950 border border-slate-800 rounded">
@@ -539,6 +586,97 @@ export const MetacognitiveConsole: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Educational Terminology Glossary Modal */}
+      {showGlossaryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    Metacognitive Actor-Critic Glossary
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 border border-cyan-800 text-cyan-300">
+                      Educational Reference
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Comprehensive definitions, convergence criteria, and mathematical rules for the studio.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowGlossaryModal(false)}
+                className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label="Close glossary modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Glossary Content Grid */}
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.values(EDUCATIONAL_GLOSSARY).map((concept) => (
+                  <div
+                    key={concept.term}
+                    className="p-4 rounded-lg bg-slate-950/80 border border-slate-800/90 hover:border-slate-700 transition-colors space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 font-semibold uppercase">
+                        {concept.category || 'Architecture'}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500">Ref: {concept.term.slice(0, 12)}</span>
+                    </div>
+
+                    <h4 className="font-bold text-slate-100 font-mono text-sm pt-0.5">
+                      {concept.term}
+                    </h4>
+
+                    <p className="text-slate-300 leading-relaxed text-xs">
+                      {concept.shortDefinition}
+                    </p>
+
+                    {concept.detailedExplanation && (
+                      <p className="text-[11px] text-slate-400 border-t border-slate-900 pt-2 leading-relaxed">
+                        {concept.detailedExplanation}
+                      </p>
+                    )}
+
+                    {concept.formulaOrRule && (
+                      <div className="p-2 bg-slate-900/90 rounded border border-slate-800 font-mono text-[11px] text-cyan-300">
+                        <span className="text-slate-500 block text-[10px] uppercase">Rule / Formula:</span>
+                        {concept.formulaOrRule}
+                      </div>
+                    )}
+
+                    {concept.impactOnOutput && (
+                      <div className="text-[10px] text-amber-300/90 font-sans pt-1">
+                        <strong>Studio Impact: </strong>{concept.impactOnOutput}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
+              <span>Tip: Hover over any dotted label in the console to inspect definitions in-place.</span>
+              <button
+                onClick={() => setShowGlossaryModal(false)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Done Reading
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
