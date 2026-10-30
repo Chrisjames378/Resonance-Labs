@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { Navbar } from './components/Navbar.tsx';
 import { HeroSection } from './components/HeroSection.tsx';
 import { NeuralDesigner } from './components/NeuralDesigner.tsx';
@@ -107,6 +108,9 @@ export default function App() {
         isOpen={isWaitlistOpen}
         onClose={() => setIsWaitlistOpen(false)}
       />
+
+      {/* Vercel Web Analytics */}
+      <Analytics />
 
     </div>
   );
