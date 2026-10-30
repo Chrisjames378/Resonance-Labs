@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar.tsx';
 import { HeroSection } from './components/HeroSection.tsx';
 import { NeuralDesigner } from './components/NeuralDesigner.tsx';
@@ -8,10 +8,49 @@ import { CurriculumLesson } from './components/CurriculumLesson.tsx';
 import { DatabaseApiInspector } from './components/DatabaseApiInspector.tsx';
 import { AudioWaveformVisualizer } from './components/AudioWaveformVisualizer.tsx';
 import { WaitlistModal } from './components/WaitlistModal.tsx';
+import { PricingModal } from './components/PricingModal.tsx';
+import { UserSubscription, SubscriptionTier } from './types/index.ts';
+import { getUserBilling } from './services/api.ts';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('designer');
   const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
+  const [isPricingOpen, setIsPricingOpen] = useState(false);
+  const [pricingInitialTier, setPricingInitialTier] = useState<SubscriptionTier>('pro');
+
+  const [userSubscription, setUserSubscription] = useState<UserSubscription>({
+    userId: 'demo-user-1',
+    email: 'chris.james378@gmail.com',
+    tier: 'pro',
+    billingStatus: 'ACTIVE',
+    billingCycle: 'monthly',
+    tokenBalance: 8450,
+    tokensConsumed: 1550,
+    tokenLimitMonthly: 10000,
+    paypalSubscriptionId: 'I-BW0K948D4U6E',
+    paypalCustomerId: 'CUST-RES-378',
+    lastPaymentDate: new Date(Date.now() - 6 * 86400000).toISOString(),
+    nextBillingDate: new Date(Date.now() + 24 * 86400000).toISOString()
+  });
+
+  useEffect(() => {
+    getUserBilling('demo-user-1')
+      .then((sub) => {
+        if (sub) {
+          setUserSubscription(sub);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load initial billing status:', err);
+      });
+  }, []);
+
+  const handleOpenPricing = (tier?: SubscriptionTier) => {
+    if (tier) {
+      setPricingInitialTier(tier);
+    }
+    setIsPricingOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-300">
@@ -24,6 +63,8 @@ export default function App() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onOpenWaitlist={() => setIsWaitlistOpen(true)}
+        userSubscription={userSubscription}
+        onOpenPricing={handleOpenPricing}
       />
 
       {/* Hero Section (Displayed on Studio Canvas) */}
@@ -91,10 +132,16 @@ export default function App() {
             <span aria-hidden="true">·</span>
             <span>Computational Metacognition R&D</span>
             <span aria-hidden="true">·</span>
-            <span>AI Studios Build</span>
+            <span>PayPal Billing Engine</span>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            <button
+              onClick={() => handleOpenPricing()}
+              className="text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
+            >
+              Pricing & Plans ($29/mo)
+            </button>
             <button
               onClick={() => setActiveTab('audio')}
               className="hover:text-slate-300 transition-colors"
@@ -115,7 +162,7 @@ export default function App() {
             </button>
             <button
               onClick={() => setIsWaitlistOpen(true)}
-              className="text-emerald-400 hover:text-emerald-300 transition-colors"
+              className="text-slate-400 hover:text-slate-300 transition-colors"
             >
               Developer Waitlist
             </button>
@@ -127,6 +174,15 @@ export default function App() {
       <WaitlistModal
         isOpen={isWaitlistOpen}
         onClose={() => setIsWaitlistOpen(false)}
+      />
+
+      {/* Interactive PayPal Pricing & Checkout Modal */}
+      <PricingModal
+        isOpen={isPricingOpen}
+        onClose={() => setIsPricingOpen(false)}
+        currentSubscription={userSubscription}
+        onSubscriptionUpdated={(updated) => setUserSubscription(updated)}
+        initialSelectedTier={pricingInitialTier}
       />
 
     </div>

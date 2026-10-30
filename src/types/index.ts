@@ -68,11 +68,36 @@ export interface CurriculumExercise {
   completed: boolean;
 }
 
+export type SubscriptionTier = 'hobby' | 'pro' | 'enterprise';
+export type BillingCycle = 'monthly' | 'annual';
+
 export interface UserSubscription {
+  userId: string;
   email: string;
-  tier: 'hobby' | 'pro' | 'enterprise';
+  tier: SubscriptionTier;
   billingStatus: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED' | 'INACTIVE';
-  tokenLimitMonthly: number;
+  billingCycle: BillingCycle;
+  tokenBalance: number;
   tokensConsumed: number;
-  paypalSubscriptionId?: string;
+  tokenLimitMonthly: number;
+  paypalSubscriptionId?: string | null;
+  paypalCustomerId?: string | null;
+  lastPaymentDate?: string;
+  nextBillingDate?: string;
 }
+
+export interface PricingPlan {
+  id: SubscriptionTier;
+  name: string;
+  tagline: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  monthlyTokens: number;
+  paypalPlanIdMonthly: string;
+  paypalPlanIdAnnual: string;
+  popular?: boolean;
+  features: string[];
+  limitations?: string[];
+  badge?: string;
+}
+

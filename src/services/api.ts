@@ -1,4 +1,4 @@
-import { MetacognitiveTelemetry, InnerMonologueStep } from '../types/index.ts';
+import { MetacognitiveTelemetry, InnerMonologueStep, UserSubscription } from '../types/index.ts';
 
 export async function registerInterest(email: string): Promise<{ success: boolean; message: string; ledgerId: string }> {
   try {
@@ -90,6 +90,127 @@ export async function fetchTelemetry(projectId: string = 'proj_default'): Promis
   };
 }
 
+export async function getUserBilling(userId: string = 'demo-user-1'): Promise<UserSubscription> {
+  try {
+    const res = await fetch(`/api/v1/billing/user/${userId}`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  // Resilient fallback with localStorage persistence
+  const cached = localStorage.getItem('resonance_user_billing');
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    userId,
+    email: 'chris.james378@gmail.com',
+    tier: 'pro',
+    billingStatus: 'ACTIVE',
+    billingCycle: 'monthly',
+    tokenBalance: 8450,
+    tokensConsumed: 1550,
+    tokenLimitMonthly: 10000,
+    paypalSubscriptionId: 'I-BW0K948D4U6E',
+    paypalCustomerId: 'CUST-RES-378',
+    lastPaymentDate: new Date(Date.now() - 6 * 86400000).toISOString(),
+    nextBillingDate: new Date(Date.now() + 24 * 86400000).toISOString()
+  };
+}
+
+export async function completePayPalCheckout(payload: {
+  userId?: string;
+  type: 'subscription' | 'token_pack';
+  tier?: string;
+  cycle?: 'monthly' | 'annual';
+  packs?: number;
+  amount: number;
+  paypalSubscriptionId?: string;
+  paypalOrderId?: string;
+}): Promise<{ success: boolean; user: UserSubscription; transactionId: string; message: string }> {
+  try {
+    const res = await fetch('/api/v1/billing/checkout-complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('resonance_user_billing', JSON.stringify(data.user));
+      return data;
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  // Local fallback
+  const current = await getUserBilling(payload.userId || 'demo-user-1');
+  const updated: UserSubscription = { ...current };
+
+  if (payload.type === 'subscription') {
+    updated.tier = (payload.tier as any) || 'pro';
+    updated.billingCycle = payload.cycle || 'monthly';
+    updated.billingStatus = 'ACTIVE';
+    updated.paypalSubscriptionId = payload.paypalSubscriptionId || `I-LOC${Math.random().toString(16).substring(2, 8).toUpperCase()}`;
+    const monthlyTokens = updated.tier === 'enterprise' ? 100000 : updated.tier === 'pro' ? 10000 : 1000;
+    updated.tokenLimitMonthly = monthlyTokens;
+    updated.tokenBalance = Math.max(updated.tokenBalance, monthlyTokens);
+  } else if (payload.type === 'token_pack') {
+    const tokens = (payload.packs || 1) * 1000;
+    updated.tokenBalance += tokens;
+  }
+
+  localStorage.setItem('resonance_user_billing', JSON.stringify(updated));
+  return {
+    success: true,
+    user: updated,
+    transactionId: `PAYPAL-TXN-${Math.random().toString(16).substring(2, 10).toUpperCase()}`,
+    message: payload.type === 'subscription'
+      ? `Successfully upgraded to ${updated.tier.toUpperCase()} via PayPal!`
+      : `Successfully credited ${(payload.packs || 1) * 1000} tokens via PayPal!`
+  };
+}
+
+export async function cancelSubscription(userId: string = 'demo-user-1'): Promise<{ success: boolean; user: UserSubscription; message: string }> {
+  try {
+    const res = await fetch('/api/v1/billing/cancel-subscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('resonance_user_billing', JSON.stringify(data.user));
+      return data;
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const current = await getUserBilling(userId);
+  const updated: UserSubscription = {
+    ...current,
+    tier: 'hobby',
+    billingStatus: 'CANCELLED',
+    tokenLimitMonthly: 1000
+  };
+  localStorage.setItem('resonance_user_billing', JSON.stringify(updated));
+
+  return {
+    success: true,
+    user: updated,
+    message: 'Subscription successfully cancelled. Reverted to Hobby tier.'
+  };
+}
+
 export async function triggerPaypalWebhook(eventType: string, subscriptionId: string): Promise<any> {
   try {
     const res = await fetch('/api/v1/billing/paypal-webhook', {
@@ -108,6 +229,7 @@ export async function triggerPaypalWebhook(eventType: string, subscriptionId: st
   }
   return { received: true, eventType, status: 'ACTIVE_TIER_SYNCED' };
 }
+
 
 /**
  * Executes Lesson 01 Actor-Critic Metacognitive Loop Simulation

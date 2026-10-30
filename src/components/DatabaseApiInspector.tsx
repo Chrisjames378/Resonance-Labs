@@ -707,16 +707,16 @@ export const DatabaseApiInspector: React.FC = () => {
                 ? 'bg-emerald-950/20 border-emerald-600 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
                 : 'bg-slate-900/40 border-slate-800'
             }`}>
-              <div className="text-xs font-mono text-emerald-400 uppercase">Tier: Pro Developer</div>
-              <div className="text-2xl font-bold text-slate-100 mt-1">$49<span className="text-xs font-normal text-slate-400">/mo</span></div>
+              <div className="text-xs font-mono text-emerald-400 uppercase">Tier: Pro Researcher</div>
+              <div className="text-2xl font-bold text-slate-100 mt-1">$29<span className="text-xs font-normal text-slate-400">/mo</span></div>
               <p className="text-xs text-slate-400 mt-2">
                 For production AI engineers building high-throughput Actor-Critic pipelines.
               </p>
               <div className="mt-4 pt-3 border-t border-slate-800 text-xs font-mono text-slate-300 space-y-1">
-                <div>· Multi-Model Router active</div>
+                <div>· Multi-Model Router & SSE streaming</div>
                 <div>· Unlimited local WebGPU runs</div>
-                <div>· 2,000,000 cloud tokens/mo</div>
-                <div>· Dedicated PostgreSQL sync</div>
+                <div>· 10,000 cloud tokens/mo</div>
+                <div>· Dedicated PostgreSQL sync & worklet export</div>
               </div>
               <button
                 onClick={() => {
@@ -725,7 +725,7 @@ export const DatabaseApiInspector: React.FC = () => {
                 }}
                 className="mt-6 w-full py-2 text-xs font-semibold rounded bg-emerald-400 hover:bg-emerald-300 text-slate-950 transition-colors"
               >
-                {currentTier === 'pro' ? 'Active PayPal Subscription' : 'Simulate PayPal Subscribe'}
+                {currentTier === 'pro' ? 'Active PayPal Subscription' : 'Simulate PayPal Subscribe ($29/mo)'}
               </button>
             </div>
 
@@ -735,22 +735,25 @@ export const DatabaseApiInspector: React.FC = () => {
                 ? 'bg-cyan-950/20 border-cyan-600'
                 : 'bg-slate-900/40 border-slate-800'
             }`}>
-              <div className="text-xs font-mono text-cyan-400 uppercase">Tier: Enterprise Cluster</div>
-              <div className="text-2xl font-bold text-slate-100 mt-1">Custom</div>
+              <div className="text-xs font-mono text-cyan-400 uppercase">Tier: Studio & Team</div>
+              <div className="text-2xl font-bold text-slate-100 mt-1">$199<span className="text-xs font-normal text-slate-400">/mo</span></div>
               <p className="text-xs text-slate-400 mt-2">
                 For laboratories requiring dedicated cluster hardware and strict SLAs.
               </p>
               <div className="mt-4 pt-3 border-t border-slate-800 text-xs font-mono text-slate-300 space-y-1">
-                <div>· Dedicated TPU/GPU nodes</div>
-                <div>· Custom inner monologue logic</div>
-                <div>· HIPAA / SOC-2 compliance</div>
+                <div>· Dedicated TPU/GPU nodes & clustering</div>
+                <div>· Custom inner monologue logic & critic weights</div>
+                <div>· 100,000 monthly cloud tokens</div>
                 <div>· 24/7 dedicated engineering SLA</div>
               </div>
               <button
-                onClick={() => setCurrentTier('enterprise')}
-                className="mt-6 w-full py-2 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
+                onClick={() => {
+                  setCurrentTier('enterprise');
+                  handleTestPaypal('BILLING.SUBSCRIPTION.ACTIVATED');
+                }}
+                className="mt-6 w-full py-2 text-xs font-semibold rounded bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition-colors"
               >
-                Contact Resonance Sales
+                {currentTier === 'enterprise' ? 'Active Studio Subscription' : 'Subscribe via PayPal ($199/mo)'}
               </button>
             </div>
 

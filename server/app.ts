@@ -13,11 +13,19 @@ export const userDatabase: Map<string, any> = new Map([
   [
     'demo-user-1',
     {
-      id: 'usr_001_demo',
-      email: 'researcher@resonance-labs.ai',
-      subscription_tier: 'pro',
-      billing_status: 'ACTIVE',
-      created_at: new Date().toISOString()
+      userId: 'usr_001_demo',
+      email: 'chris.james378@gmail.com',
+      tier: 'pro',
+      billingStatus: 'ACTIVE',
+      billingCycle: 'monthly',
+      tokenBalance: 8450,
+      tokensConsumed: 1550,
+      tokenLimitMonthly: 10000,
+      paypalSubscriptionId: 'I-BW0K948D4U6E',
+      paypalCustomerId: 'CUST-RES-378',
+      lastPaymentDate: new Date(Date.now() - 6 * 86400000).toISOString(),
+      nextBillingDate: new Date(Date.now() + 24 * 86400000).toISOString(),
+      createdAt: new Date().toISOString()
     }
   ]
 ]);
@@ -75,6 +83,124 @@ app.post('/api/auth/register-interest', (req: Request, res: Response) => {
 });
 
 /**
+ * @route GET /api/v1/billing/user/:userId
+ * @desc Retrieves current subscription tier, token balance, and active PayPal billing metadata
+ */
+app.get('/api/v1/billing/user/:userId', (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const user = userDatabase.get(userId) || userDatabase.get('demo-user-1') || {
+    userId: userId || 'usr_001_demo',
+    email: 'chris.james378@gmail.com',
+    tier: 'pro',
+    billingStatus: 'ACTIVE',
+    billingCycle: 'monthly',
+    tokenBalance: 8450,
+    tokensConsumed: 1550,
+    tokenLimitMonthly: 10000,
+    paypalSubscriptionId: 'I-BW0K948D4U6E',
+    paypalCustomerId: 'CUST-RES-378',
+    lastPaymentDate: new Date(Date.now() - 6 * 86400000).toISOString(),
+    nextBillingDate: new Date(Date.now() + 24 * 86400000).toISOString(),
+    createdAt: new Date().toISOString()
+  };
+
+  return res.status(200).json(user);
+});
+
+/**
+ * @route POST /api/v1/billing/checkout-complete
+ * @desc Processes successful PayPal checkout completions for subscriptions or one-time token packs
+ */
+app.post('/api/v1/billing/checkout-complete', (req: Request, res: Response) => {
+  const {
+    userId = 'demo-user-1',
+    type = 'subscription', // 'subscription' | 'token_pack'
+    tier = 'pro',
+    cycle = 'monthly',
+    packs = 1,
+    amount = 29,
+    paypalSubscriptionId,
+    paypalOrderId
+  } = req.body;
+
+  let user = userDatabase.get(userId);
+  if (!user) {
+    user = {
+      userId,
+      email: 'chris.james378@gmail.com',
+      tier: 'hobby',
+      billingStatus: 'ACTIVE',
+      billingCycle: 'monthly',
+      tokenBalance: 1000,
+      tokensConsumed: 0,
+      tokenLimitMonthly: 1000,
+      paypalSubscriptionId: null,
+      paypalCustomerId: `CUST-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  const transactionId = `PAYPAL-TXN-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+
+  if (type === 'subscription') {
+    user.tier = tier;
+    user.billingCycle = cycle;
+    user.billingStatus = 'ACTIVE';
+    user.paypalSubscriptionId = paypalSubscriptionId || `I-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+    user.lastPaymentDate = new Date().toISOString();
+    
+    // Add tier quota tokens
+    const tierTokens = tier === 'enterprise' ? 100000 : tier === 'pro' ? 10000 : 1000;
+    user.tokenLimitMonthly = tierTokens;
+    user.tokenBalance = Math.max(user.tokenBalance, tierTokens);
+
+    const nextDays = cycle === 'annual' ? 365 : 30;
+    user.nextBillingDate = new Date(Date.now() + nextDays * 86400000).toISOString();
+  } else if (type === 'token_pack') {
+    const purchasedTokens = (packs || 1) * 1000;
+    user.tokenBalance = (user.tokenBalance || 0) + purchasedTokens;
+  }
+
+  userDatabase.set(userId, user);
+
+  console.log(`[PayPal Billing] Checkout complete (${type}): User ${userId} upgraded/credited. Txn: ${transactionId}`);
+
+  return res.status(200).json({
+    success: true,
+    transactionId,
+    orderId: paypalOrderId || `ORDER-${Date.now()}`,
+    type,
+    amount,
+    user,
+    message: type === 'subscription' 
+      ? `Successfully activated ${user.tier.toUpperCase()} subscription via PayPal!`
+      : `Successfully added ${(packs || 1) * 1000} Gemini Interaction tokens to balance!`
+  });
+});
+
+/**
+ * @route POST /api/v1/billing/cancel-subscription
+ * @desc Cancels current PayPal subscription and downgrades user to hobby plan
+ */
+app.post('/api/v1/billing/cancel-subscription', (req: Request, res: Response) => {
+  const { userId = 'demo-user-1' } = req.body;
+  let user = userDatabase.get(userId) || userDatabase.get('demo-user-1');
+
+  if (user) {
+    user.tier = 'hobby';
+    user.billingStatus = 'CANCELLED';
+    user.tokenLimitMonthly = 1000;
+    userDatabase.set(userId, user);
+  }
+
+  return res.status(200).json({
+    success: true,
+    user,
+    message: 'Subscription successfully cancelled. Account reverted to Hobby tier.'
+  });
+});
+
+/**
  * @route POST /api/v1/billing/paypal-webhook
  * @desc Statically parses and processes live structural payment loops coming directly from PayPal
  */
@@ -86,12 +212,31 @@ app.post('/api/v1/billing/paypal-webhook', (req: Request, res: Response) => {
     case 'BILLING.SUBSCRIPTION.ACTIVATED': {
       const subscriptionId = webhookEvent.resource?.id || `sub_${Date.now()}`;
       console.log(`[PayPal Webhook] Subscription confirmed active: ${subscriptionId}`);
+      // Find and update active user
+      const demoUser = userDatabase.get('demo-user-1');
+      if (demoUser) {
+        demoUser.tier = 'pro';
+        demoUser.billingStatus = 'ACTIVE';
+        demoUser.paypalSubscriptionId = subscriptionId;
+        userDatabase.set('demo-user-1', demoUser);
+      }
+      break;
+    }
+
+    case 'PAYMENT.CAPTURE.COMPLETED': {
+      console.log(`[PayPal Webhook] Capture completed: ${webhookEvent.resource?.id}`);
       break;
     }
 
     case 'BILLING.SUBSCRIPTION.CANCELLED':
     case 'BILLING.SUBSCRIPTION.EXPIRED': {
       console.log(`[PayPal Webhook] Subscription terminated: ${webhookEvent.resource?.id}`);
+      const demoUser = userDatabase.get('demo-user-1');
+      if (demoUser) {
+        demoUser.tier = 'hobby';
+        demoUser.billingStatus = 'CANCELLED';
+        userDatabase.set('demo-user-1', demoUser);
+      }
       break;
     }
     
