@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Play, RotateCcw, AlertTriangle, CheckCircle2, Sliders, Activity, BrainCircuit } from 'lucide-react';
 import { InnerMonologueStep, MetacognitiveTelemetry } from '../types/index.ts';
-import { runMetacognitiveLoopSim, fetchTelemetry } from '../services/api.ts';
+import { runMetacognitiveLoopSim, fetchTelemetry, subscribeTelemetrySSE } from '../services/api.ts';
 import { LatencyHeatmap } from './LatencyHeatmap.tsx';
 
 export const MetacognitiveConsole: React.FC = () => {
@@ -24,33 +24,59 @@ export const MetacognitiveConsole: React.FC = () => {
   const [lossThreshold, setLossThreshold] = useState<number>(0.08);
   const [isLossWarning, setIsLossWarning] = useState<boolean>(false);
   const [lossAlertLog, setLossAlertLog] = useState<string | null>(null);
+  const [useSSE, setUseSSE] = useState<boolean>(true);
+  const [sseActive, setSseActive] = useState<boolean>(false);
 
-  // Poll live telemetry stream with loss threshold monitoring
+  // Monitor live telemetry stream via Server-Sent Events (SSE) or polling fallback
   useEffect(() => {
     let active = true;
-    const fetchLatest = () => {
-      fetchTelemetry('proj_default').then((data) => {
-        if (active && data) {
-          setTelemetry(data);
-          const currentLoss = data.metrics.loss;
-          if (currentLoss > lossThreshold) {
-            setIsLossWarning(true);
-            setLossAlertLog(
-              `Loss spike detected: ${currentLoss.toFixed(4)} > threshold ${lossThreshold.toFixed(4)} at ${new Date().toLocaleTimeString()}`
-            );
-          } else {
-            setIsLossWarning(false);
-          }
+
+    const handleNewTelemetry = (data: MetacognitiveTelemetry) => {
+      if (!active || !data) return;
+      setTelemetry(data);
+      const currentLoss = data.metrics.loss;
+      if (currentLoss > lossThreshold) {
+        setIsLossWarning(true);
+        setLossAlertLog(
+          `Loss spike detected: ${currentLoss.toFixed(4)} > threshold ${lossThreshold.toFixed(4)} at ${new Date().toLocaleTimeString()}`
+        );
+      } else {
+        setIsLossWarning(false);
+      }
+    };
+
+    if (useSSE && typeof window !== 'undefined' && window.EventSource) {
+      setSseActive(true);
+      const unsubscribe = subscribeTelemetrySSE(
+        'proj_default',
+        (data) => {
+          handleNewTelemetry(data);
+        },
+        () => {
+          // If SSE encounters an error, revert to polling gracefully
+          setSseActive(false);
         }
-      });
-    };
-    fetchLatest();
-    const interval = setInterval(fetchLatest, 3500);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [lossThreshold]);
+      );
+
+      return () => {
+        active = false;
+        unsubscribe();
+      };
+    } else {
+      setSseActive(false);
+      const fetchLatest = () => {
+        fetchTelemetry('proj_default').then((data) => {
+          handleNewTelemetry(data);
+        });
+      };
+      fetchLatest();
+      const interval = setInterval(fetchLatest, 3500);
+      return () => {
+        active = false;
+        clearInterval(interval);
+      };
+    }
+  }, [lossThreshold, useSSE]);
 
   // Immediate manual loss spike simulation for testing
   const handleSimulateLossSpike = () => {
@@ -365,11 +391,26 @@ export const MetacognitiveConsole: React.FC = () => {
           {/* Live Relational Stream Telemetry Card */}
           <div className="p-5 bg-slate-900/80 border border-slate-800 rounded space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <Activity className="w-4 h-4 text-emerald-400" />
                 <span className="text-xs font-mono text-slate-300 font-semibold">
-                  Live Gateway Stream (`/api/v1/telemetry/stream/:projectId`)
+                  Live Gateway Stream
                 </span>
+                <span className="text-[11px] font-mono text-slate-500">
+                  {useSSE ? '`/api/v1/telemetry/sse/:id`' : '`/api/v1/telemetry/stream/:id`'}
+                </span>
+                <button
+                  onClick={() => setUseSSE(!useSSE)}
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    useSSE && sseActive
+                      ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-400'
+                      : 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Toggle between Server-Sent Events (SSE) and HTTP Polling"
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${useSSE && sseActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                  {useSSE && sseActive ? 'SSE Active (Live Push)' : 'Polling (3.5s)'}
+                </button>
               </div>
               
               {/* Loss Threshold Tuning & Spike Test */}

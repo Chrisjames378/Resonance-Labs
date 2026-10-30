@@ -6,6 +6,7 @@ import { MetacognitiveConsole } from './components/MetacognitiveConsole.tsx';
 import { ModelRouter } from './components/ModelRouter.tsx';
 import { CurriculumLesson } from './components/CurriculumLesson.tsx';
 import { DatabaseApiInspector } from './components/DatabaseApiInspector.tsx';
+import { AudioWaveformVisualizer } from './components/AudioWaveformVisualizer.tsx';
 import { WaitlistModal } from './components/WaitlistModal.tsx';
 
 export default function App() {
@@ -50,6 +51,20 @@ export default function App() {
           <MetacognitiveConsole />
         )}
 
+        {activeTab === 'audio' && (
+          <div className="space-y-6">
+            <div className="border-b border-slate-800 pb-4">
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2">
+                Autonomous Audio Core Engine & Waveforms
+              </h2>
+              <p className="text-sm text-slate-400 mt-1">
+                Real-time Web Audio API processor worklet generating sympathetic harmonics with 60FPS dual-mode frequency spectrum and oscilloscope rendering.
+              </p>
+            </div>
+            <AudioWaveformVisualizer initialEmpathy={0.85} />
+          </div>
+        )}
+
         {activeTab === 'router' && (
           <ModelRouter />
         )}
@@ -80,6 +95,12 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-6">
+            <button
+              onClick={() => setActiveTab('audio')}
+              className="hover:text-slate-300 transition-colors"
+            >
+              Audio Worklet Core
+            </button>
             <button
               onClick={() => setActiveTab('database')}
               className="hover:text-slate-300 transition-colors"

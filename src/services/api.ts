@@ -215,3 +215,41 @@ export async function callGeminiInteractions(prompt: string, model: string = 'mo
   };
 }
 
+/**
+ * Subscribes to the Server-Sent Events (SSE) telemetry stream on /api/v1/telemetry/sse/:projectId
+ * Returns an unsubscription function that cleanly closes the EventSource connection.
+ */
+export function subscribeTelemetrySSE(
+  projectId: string = 'proj_default',
+  onMessage: (data: MetacognitiveTelemetry) => void,
+  onError?: (err: Event) => void
+): () => void {
+  if (typeof window === 'undefined' || !window.EventSource) {
+    console.warn('[SSE] EventSource is not supported in this runtime environment.');
+    return () => {};
+  }
+
+  const sseUrl = `/api/v1/telemetry/sse/${projectId}`;
+  const eventSource = new EventSource(sseUrl);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data && data.metrics) {
+        onMessage(data as MetacognitiveTelemetry);
+      }
+    } catch (e) {
+      console.warn('[SSE] Error parsing telemetry event:', e);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    if (onError) onError(err);
+  };
+
+  return () => {
+    eventSource.close();
+  };
+}
+
+

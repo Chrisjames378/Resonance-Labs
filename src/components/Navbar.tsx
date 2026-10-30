@@ -70,6 +70,17 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onSelectTab, onOpenWa
           </button>
 
           <button
+            onClick={() => onSelectTab('audio')}
+            className={`transition-colors whitespace-nowrap shrink-0 py-1 border-b-2 text-left ${
+              activeTab === 'audio'
+                ? 'text-emerald-400 border-emerald-400'
+                : 'text-slate-400 border-transparent hover:text-slate-200 hover:border-slate-700'
+            }`}
+          >
+            Audio Core & Waveforms
+          </button>
+
+          <button
             onClick={() => onSelectTab('database')}
             className={`transition-colors whitespace-nowrap shrink-0 py-1 border-b-2 text-left ${
               activeTab === 'database'

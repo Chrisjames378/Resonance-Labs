@@ -147,12 +147,9 @@ app.post('/api/v1/studio/commit-model', (req: Request, res: Response) => {
 });
 
 /**
- * @route GET /api/v1/telemetry/stream/:projectId
- * @desc Serves real-time execution snapshots mapping actor error vs critic reflection states
+ * Helper to generate synthetic telemetry packets
  */
-app.get('/api/v1/telemetry/stream/:projectId', (req: Request, res: Response) => {
-  const { projectId } = req.params;
-
+function generateTelemetryPacket(projectId: string) {
   const reflections = [
     "Actor layer computing next synthesis weight vector.",
     "Critic loop evaluating confidence boundary: State stable.",
@@ -162,14 +159,13 @@ app.get('/api/v1/telemetry/stream/:projectId', (req: Request, res: Response) => 
     "Latency buffer cleared. Hardware thread efficiency nominal."
   ];
 
-  // Pick 3 random reflections
   const selectedReflections = [
     reflections[Math.floor(Math.random() * reflections.length)],
     reflections[Math.floor(Math.random() * reflections.length)],
     reflections[Math.floor(Math.random() * reflections.length)]
   ];
 
-  const dynamicTelemetryPacket = {
+  return {
     projectId,
     timestamp: new Date().toISOString(),
     metrics: {
@@ -181,8 +177,53 @@ app.get('/api/v1/telemetry/stream/:projectId', (req: Request, res: Response) => 
     },
     internalReflections: selectedReflections
   };
+}
 
+/**
+ * @route GET /api/v1/telemetry/stream/:projectId
+ * @desc Serves real-time execution snapshots mapping actor error vs critic reflection states
+ */
+app.get('/api/v1/telemetry/stream/:projectId', (req: Request, res: Response) => {
+  const { projectId } = req.params;
+  const dynamicTelemetryPacket = generateTelemetryPacket(projectId);
   return res.status(200).json(dynamicTelemetryPacket);
+});
+
+/**
+ * @route GET /api/v1/telemetry/sse/:projectId
+ * @desc Server-Sent Events (SSE) streaming telemetry packets in real-time
+ */
+app.get('/api/v1/telemetry/sse/:projectId', (req: Request, res: Response) => {
+  const { projectId } = req.params;
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*'
+  });
+
+  // Initial connection handshake
+  res.write(`event: connected\ndata: ${JSON.stringify({ status: 'SSE_CONNECTED', projectId, timestamp: new Date().toISOString() })}\n\n`);
+
+  // Send first telemetry packet immediately
+  const initialPacket = generateTelemetryPacket(projectId);
+  res.write(`data: ${JSON.stringify(initialPacket)}\n\n`);
+
+  // Recurring telemetry stream every 1500ms
+  const sseInterval = setInterval(() => {
+    try {
+      const packet = generateTelemetryPacket(projectId);
+      res.write(`data: ${JSON.stringify(packet)}\n\n`);
+    } catch {
+      clearInterval(sseInterval);
+    }
+  }, 1500);
+
+  req.on('close', () => {
+    clearInterval(sseInterval);
+    res.end();
+  });
 });
 
 /**
